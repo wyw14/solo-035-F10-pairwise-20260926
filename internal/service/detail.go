@@ -6,6 +6,7 @@ import (
 	"github.com/wyw14/solo-035/internal/caption"
 	"github.com/wyw14/solo-035/internal/model"
 	"github.com/wyw14/solo-035/internal/mux"
+	"github.com/wyw14/solo-035/internal/verification"
 )
 
 type SourceDetail struct {
@@ -19,6 +20,7 @@ type EventDetail struct {
 	Audio        *audio.PathState      `json:"audio,omitempty"`
 	Caption      *caption.Cue          `json:"caption,omitempty"`
 	Failover     *backup.FailoverState `json:"failover,omitempty"`
+	Verification *verification.Result  `json:"source_verification,omitempty"`
 	PlayoutTrace []string              `json:"playout_trace"`
 	WorkerActive bool                  `json:"worker_active"`
 }
@@ -46,6 +48,9 @@ func (runtime *Runtime) Detail() OperationalDetail {
 	}
 	for _, item := range runtime.Events.List() {
 		eventDetail := EventDetail{EventID: item.ID, PlayoutTrace: runtime.Playout.Trace(item.ID), WorkerActive: runtime.PlayoutFlow.Active(item.ID)}
+		if result, ok := runtime.Verification.Latest(item.ID); ok {
+			eventDetail.Verification = &result
+		}
 		if path, ok := runtime.AudioState.Path(item.ID); ok {
 			eventDetail.Audio = &path
 		}

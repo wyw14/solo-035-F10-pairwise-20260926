@@ -23,6 +23,7 @@ func (runtime *Runtime) Snapshot() model.RuntimeSnapshot {
 		captionStatus, captionKnown := runtime.Captions.Get(event.ID)
 		captionPassed := captionKnown && captionStatus.Continuous && captionStatus.EncoderErr == ""
 		snapshot.Interlocks = append(snapshot.Interlocks, model.InterlockView{EventID: event.ID, Name: "caption-continuity", Passed: captionPassed, Detail: captionStatus.EncoderErr})
+		snapshot.Interlocks = append(snapshot.Interlocks, runtime.sourceIdentityInterlock(event.ID))
 		if captionStatus.EncoderErr != "" {
 			snapshot.Incidents = append(snapshot.Incidents, model.IncidentView{ID: uuid.NewString(), EventID: event.ID, Severity: "error", Message: captionStatus.EncoderErr, CreatedAt: captionStatus.UpdatedAt})
 		}
@@ -58,4 +59,24 @@ func (runtime *Runtime) Interlocks() []model.InterlockView {
 
 func (runtime *Runtime) Incidents() []model.IncidentView {
 	return runtime.Snapshot().Incidents
+}
+
+func (runtime *Runtime) sourceIdentityInterlock(eventID model.EventID) model.InterlockView {
+	interlock := model.InterlockView{EventID: eventID, Name: "source-identity", Passed: false, Detail: "source identity has not been verified"}
+	expected, hasPlan := runtime.Verification.Expected(eventID)
+	latest, hasResult := runtime.Verification.Latest(eventID)
+	switch {
+	case !hasPlan:
+		interlock.Detail = "no expected source plan is recorded for this event"
+	case !hasResult:
+		interlock.Detail = "source plan changed; verification required"
+	case latest.Fingerprint != expected.Fingerprint():
+		interlock.Detail = "source plan changed after the last verification; re-verify before going on air"
+	case latest.Passed:
+		interlock.Passed = true
+		interlock.Detail = latest.Reason
+	default:
+		interlock.Detail = latest.Reason
+	}
+	return interlock
 }

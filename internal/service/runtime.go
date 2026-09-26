@@ -16,39 +16,42 @@ import (
 	"github.com/wyw14/solo-035/internal/quality"
 	"github.com/wyw14/solo-035/internal/source"
 	"github.com/wyw14/solo-035/internal/syncer"
+	"github.com/wyw14/solo-035/internal/verification"
 )
 
 type Runtime struct {
-	Clock           func() time.Time
-	Events          *event.State
-	EventFlow       *event.Integration
-	Sources         *source.State
-	SourceFlow      *source.Coordinator
-	Receiver        *source.Receiver
-	SyncState       *syncer.State
-	Sync            *syncer.Coordinator
-	Encoders        *encoder.State
-	EncoderFlow     *encoder.Coordinator
-	MuxState        *mux.State
-	Mux             *mux.Coordinator
-	AudioState      *audio.State
-	Audio           *audio.Switch
-	AudioMonitor    *audio.Monitor
-	Captions        *caption.State
-	CaptionFlow     *caption.Coordinator
-	Continuity      *caption.Continuity
-	Evidence        *quality.EvidenceSet
-	Quality         *quality.Coordinator
-	Evaluator       *quality.Evaluator
-	JournalState    *journal.State
-	JournalStore    *journal.Store
-	Journal         *journal.Integration
-	PlayoutState    *playout.State
-	Playout         *playout.Coordinator
-	PlayoutFlow     *playout.Integration
-	PlayoutRecovery *playout.Recovery
-	BackupState     *backup.State
-	Backup          *backup.Coordinator
+	Clock             func() time.Time
+	Events            *event.State
+	EventFlow         *event.Integration
+	Sources           *source.State
+	SourceFlow        *source.Coordinator
+	Receiver          *source.Receiver
+	SyncState         *syncer.State
+	Sync              *syncer.Coordinator
+	Encoders          *encoder.State
+	EncoderFlow       *encoder.Coordinator
+	MuxState          *mux.State
+	Mux               *mux.Coordinator
+	AudioState        *audio.State
+	Audio             *audio.Switch
+	AudioMonitor      *audio.Monitor
+	Captions          *caption.State
+	CaptionFlow       *caption.Coordinator
+	Continuity        *caption.Continuity
+	Evidence          *quality.EvidenceSet
+	Quality           *quality.Coordinator
+	Evaluator         *quality.Evaluator
+	JournalState      *journal.State
+	JournalStore      *journal.Store
+	Journal           *journal.Integration
+	PlayoutState      *playout.State
+	Playout           *playout.Coordinator
+	PlayoutFlow       *playout.Integration
+	PlayoutRecovery   *playout.Recovery
+	VerificationState *verification.State
+	Verification      *verification.Coordinator
+	BackupState       *backup.State
+	Backup            *backup.Coordinator
 }
 
 func NewRuntime(dataDirectory string, clock func() time.Time) (*Runtime, error) {
@@ -95,6 +98,8 @@ func NewRuntime(dataDirectory string, clock func() time.Time) (*Runtime, error) 
 	runtime.Playout = playout.NewCoordinator(runtime.PlayoutState, runtime.Journal, clock)
 	runtime.PlayoutFlow = playout.NewIntegration(runtime.PlayoutState)
 	runtime.PlayoutRecovery = playout.NewRecovery(runtime.PlayoutState, clock)
+	runtime.VerificationState = verification.NewState()
+	runtime.Verification = verification.NewCoordinator(runtime.VerificationState, clock)
 	runtime.BackupState = backup.NewState()
 	runtime.Backup = backup.NewCoordinator(runtime.BackupState, runtime.Audio, runtime.EncoderFlow, runtime.PlayoutFlow, clock)
 	if runtime.Backup == nil {

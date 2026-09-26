@@ -43,6 +43,7 @@ func (coordinator *Coordinator) PrepareSignal(eventID model.EventID, sourceID mo
 	if err := coordinator.runtime.Sync.Open(eventID, 3); err != nil {
 		return model.SignalStatus{}, err
 	}
+	coordinator.runtime.Verification.Invalidate(eventID)
 	return status, nil
 }
 
@@ -86,7 +87,20 @@ func (coordinator *Coordinator) ConfigureProgram(eventID model.EventID, sourceID
 	if err := coordinator.runtime.Mux.Activate(eventID, program.Revision); err != nil {
 		return err
 	}
-	return coordinator.runtime.Playout.Stage(event, sourceID, lease.Fence, "current-program")
+	if err := coordinator.runtime.Playout.Stage(event, sourceID, lease.Fence, "current-program"); err != nil {
+		return err
+	}
+	status, ok := coordinator.runtime.Sources.Status(sourceID)
+	if !ok {
+		return fmt.Errorf("planned source %s has no receiver status", sourceID)
+	}
+	if status.Generation != event.SourceGeneration {
+		return fmt.Errorf("planned source generation %d disagrees with event generation %d", status.Generation, event.SourceGeneration)
+	}
+	if _, err := coordinator.runtime.Verification.PlanSource(eventID, sourceID, status.Generation, event.Revision, lease.Fence); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (coordinator *Coordinator) EstablishInterlocks(eventID model.EventID) error {
@@ -125,6 +139,9 @@ func (coordinator *Coordinator) CommitOnAir(eventID model.EventID, fence uint64)
 	event, ok := coordinator.runtime.Events.Get(eventID)
 	if !ok {
 		return fmt.Errorf("event %s not found", eventID)
+	}
+	if err := coordinator.assertSourceIdentity(event, fence); err != nil {
+		return err
 	}
 	if !coordinator.runtime.Sync.Ready(eventID) {
 		return fmt.Errorf("frame synchronization is not stable")

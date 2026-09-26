@@ -39,6 +39,13 @@ func Bootstrap(runtime *Runtime) error {
 	if err := coordinator.ConfigureProgram(event.ID, sourceID); err != nil {
 		return err
 	}
+	verified, err := coordinator.VerifySource(event.ID)
+	if err != nil {
+		return err
+	}
+	if !verified.Passed {
+		return fmt.Errorf("bootstrap source verification failed: %s", verified.Reason)
+	}
 	if err := coordinator.EstablishInterlocks(event.ID); err != nil {
 		return err
 	}

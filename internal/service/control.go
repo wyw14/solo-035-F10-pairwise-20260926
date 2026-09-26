@@ -43,14 +43,23 @@ func (runtime *Runtime) ExecuteControl(ctx context.Context, request ControlReque
 		return result, err
 	case "advance-program":
 		value, err := runtime.Events.AdvanceProgram(eventID, runtime.Clock())
+		if err != nil {
+			return result, err
+		}
+		runtime.Verification.Invalidate(eventID)
 		result.Value = value
-		return result, err
+		return result, nil
 	case "advance-source":
 		value, err := runtime.Events.AdvanceSource(eventID, runtime.Clock())
+		if err != nil {
+			return result, err
+		}
+		runtime.Verification.Invalidate(eventID)
 		result.Value = value
-		return result, err
+		return result, nil
 	case "retire-source":
 		runtime.SourceFlow.Retire(sourceID)
+		runtime.Verification.InvalidateSource(sourceID)
 		result.Value = sourceID
 		return result, nil
 	case "close-sync":
@@ -81,6 +90,38 @@ func (runtime *Runtime) ExecuteControl(ctx context.Context, request ControlReque
 		runtime.Mux.Stop(eventID)
 		runtime.Playout.Stop(eventID)
 		result.Value = eventID
+		return result, nil
+	case "verify-source":
+		value, err := coordinator.VerifySource(eventID)
+		result.Value = value
+		return result, err
+	case "replan-source":
+		event, ok := runtime.Events.Get(eventID)
+		if !ok {
+			return result, fmt.Errorf("event %s not found", eventID)
+		}
+		if !sourceID.Valid() {
+			return result, fmt.Errorf("replan requires a valid source identity")
+		}
+		output, ok := runtime.Playout.Output(eventID)
+		if !ok {
+			return result, fmt.Errorf("event %s has no prepared output to replan", eventID)
+		}
+		status, ok := runtime.Sources.Status(sourceID)
+		if !ok {
+			return result, fmt.Errorf("target source %s has no registered receiver", sourceID)
+		}
+		// Reuse the existing encoder lease/fence: leases are never released, so
+		// reserving a new encoder would fail. Re-staging with the same fence is
+		// accepted and the new source plan forces a fresh verification.
+		if err := runtime.Playout.Stage(event, sourceID, output.Fence, "replanned-source"); err != nil {
+			return result, err
+		}
+		planned, err := runtime.Verification.PlanSource(eventID, sourceID, status.Generation, event.Revision, output.Fence)
+		if err != nil {
+			return result, err
+		}
+		result.Value = planned
 		return result, nil
 	case "audio-failover":
 		if err := runtime.Audio.Failover(eventID); err != nil {

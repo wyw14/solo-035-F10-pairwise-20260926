@@ -9,14 +9,16 @@ import (
 	"github.com/wyw14/solo-035/internal/model"
 	"github.com/wyw14/solo-035/internal/quality"
 	"github.com/wyw14/solo-035/internal/syncer"
+	"github.com/wyw14/solo-035/internal/verification"
 )
 
 type ControlCheckpoint struct {
-	Events  []event.RecoveryRecord   `json:"events"`
-	Sync    []syncer.Recovery        `json:"sync"`
-	Backup  []backup.RecoveryRecord  `json:"backup"`
-	Quality []quality.RecoveryRecord `json:"quality"`
-	Journal []journal.Record         `json:"journal"`
+	Events       []event.RecoveryRecord        `json:"events"`
+	Sync         []syncer.Recovery             `json:"sync"`
+	Backup       []backup.RecoveryRecord       `json:"backup"`
+	Quality      []quality.RecoveryRecord      `json:"quality"`
+	Verification []verification.RecoveryRecord `json:"verification"`
+	Journal      []journal.Record              `json:"journal"`
 }
 
 func (runtime *Runtime) ExportCheckpoint() ControlCheckpoint {
@@ -26,11 +28,12 @@ func (runtime *Runtime) ExportCheckpoint() ControlCheckpoint {
 		ids = append(ids, record.Event.ID)
 	}
 	return ControlCheckpoint{
-		Events:  events,
-		Sync:    runtime.SyncState.ExportRecovery(),
-		Backup:  runtime.BackupState.ExportRecovery(),
-		Quality: runtime.Evidence.Export(ids),
-		Journal: runtime.Journal.Records(),
+		Events:       events,
+		Sync:         runtime.SyncState.ExportRecovery(),
+		Backup:       runtime.BackupState.ExportRecovery(),
+		Quality:      runtime.Evidence.Export(ids),
+		Verification: runtime.VerificationState.ExportRecovery(),
+		Journal:      runtime.Journal.Records(),
 	}
 }
 
@@ -47,15 +50,24 @@ func (runtime *Runtime) RestoreCheckpoint(checkpoint ControlCheckpoint) (Recover
 	if err := runtime.Evidence.Restore(checkpoint.Quality); err != nil {
 		return RecoveryReport{}, fmt.Errorf("restore quality evidence: %w", err)
 	}
-	sources := make(map[model.EventID]model.SourceID)
+	if err := runtime.VerificationState.RestoreRecovery(checkpoint.Verification); err != nil {
+		return RecoveryReport{}, fmt.Errorf("restore source verifications: %w", err)
+	}
+	syncSources := make(map[model.EventID]model.SourceID)
 	for _, item := range checkpoint.Sync {
-		sources[item.EventID] = item.Source
+		syncSources[item.EventID] = item.Source
+	}
+	verifiedSources := make(map[model.EventID]model.SourceID)
+	for _, item := range checkpoint.Verification {
+		verifiedSources[item.Expected.EventID] = item.Expected.Source
 	}
 	return runtime.RestoreFromRecords(checkpoint.Journal, func(eventID model.EventID) model.SourceID {
-		sourceID := sources[eventID]
-		if sourceID == "" {
-			sourceID = model.NewSourceID()
+		if sourceID := syncSources[eventID]; sourceID != "" {
+			return sourceID
 		}
-		return sourceID
+		if sourceID := verifiedSources[eventID]; sourceID != "" {
+			return sourceID
+		}
+		return model.NewSourceID()
 	})
 }
