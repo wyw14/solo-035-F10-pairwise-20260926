@@ -95,6 +95,16 @@ func (state *State) Frames(id model.SourceID) []model.Frame {
 	return append([]model.Frame(nil), state.frames[id]...)
 }
 
+func (state *State) LatestFrame(id model.SourceID) (model.Frame, bool) {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	frames := state.frames[id]
+	if len(frames) == 0 {
+		return model.Frame{}, false
+	}
+	return frames[len(frames)-1], true
+}
+
 func (state *State) List() []model.SignalStatus {
 	state.mu.RLock()
 	defer state.mu.RUnlock()

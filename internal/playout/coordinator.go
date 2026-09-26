@@ -18,14 +18,15 @@ func NewCoordinator(state *State, log *journal.Integration, clock func() time.Ti
 	return &Coordinator{state: state, journal: log, clock: clock}
 }
 
-func (coordinator *Coordinator) Stage(event model.LiveEvent, source model.SourceID, fence uint64, segment string) error {
+func (coordinator *Coordinator) Stage(event model.LiveEvent, source model.SourceID, sourceGeneration uint64, fence uint64, segment string) error {
 	return coordinator.state.Stage(Output{
-		EventID:   event.ID,
-		Revision:  event.Revision,
-		Fence:     fence,
-		Source:    source,
-		Segment:   segment,
-		UpdatedAt: coordinator.clock().UTC(),
+		EventID:          event.ID,
+		Revision:         event.Revision,
+		Fence:            fence,
+		Source:           source,
+		SourceGeneration: sourceGeneration,
+		Segment:          segment,
+		UpdatedAt:        coordinator.clock().UTC(),
 	})
 }
 

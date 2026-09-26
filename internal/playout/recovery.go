@@ -22,12 +22,13 @@ func (recovery *Recovery) Restore(result journal.ReplayResult, source model.Sour
 		return fmt.Errorf("playout recovery requires program revision and fence")
 	}
 	output := Output{
-		EventID:   result.EventID,
-		Revision:  result.Revision,
-		Fence:     result.Fence,
-		Source:    source,
-		Segment:   segment,
-		UpdatedAt: recovery.clock().UTC(),
+		EventID:          result.EventID,
+		Revision:         result.Revision,
+		Fence:            result.Fence,
+		Source:           source,
+		SourceGeneration: result.SourceGeneration,
+		Segment:          segment,
+		UpdatedAt:        recovery.clock().UTC(),
 	}
 	if err := recovery.state.Stage(output); err != nil {
 		return err

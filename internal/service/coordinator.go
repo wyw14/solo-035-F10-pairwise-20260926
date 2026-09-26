@@ -7,6 +7,7 @@ import (
 
 	"github.com/wyw14/solo-035/internal/caption"
 	"github.com/wyw14/solo-035/internal/model"
+	"github.com/wyw14/solo-035/internal/verify"
 )
 
 type Coordinator struct {
@@ -35,6 +36,7 @@ func (coordinator *Coordinator) PrepareSignal(eventID model.EventID, sourceID mo
 	}
 	status := coordinator.runtime.SourceFlow.Switch(sourceID)
 	event = event.NewSource(coordinator.runtime.Clock())
+	event.Source = sourceID
 	event.SourceGeneration = status.Generation
 	if err := coordinator.runtime.Events.Update(event); err != nil {
 		return model.SignalStatus{}, err
@@ -86,7 +88,7 @@ func (coordinator *Coordinator) ConfigureProgram(eventID model.EventID, sourceID
 	if err := coordinator.runtime.Mux.Activate(eventID, program.Revision); err != nil {
 		return err
 	}
-	return coordinator.runtime.Playout.Stage(event, sourceID, lease.Fence, "current-program")
+	return coordinator.runtime.Playout.Stage(event, sourceID, event.SourceGeneration, lease.Fence, "current-program")
 }
 
 func (coordinator *Coordinator) EstablishInterlocks(eventID model.EventID) error {
@@ -121,6 +123,44 @@ func (coordinator *Coordinator) EstablishInterlocks(eventID model.EventID) error
 	return nil
 }
 
+func (coordinator *Coordinator) VerifySource(eventID model.EventID, fence uint64) (model.SourceCheck, error) {
+	event, ok := coordinator.runtime.Events.Get(eventID)
+	if !ok {
+		return model.SourceCheck{}, fmt.Errorf("event %s not found", eventID)
+	}
+	observation := verify.Observation{}
+	if status, ok := coordinator.runtime.Sync.Status(eventID); ok {
+		observation.ObservedSource = status.Source
+		observation.ObservedGeneration = status.SourceGeneration
+		observation.ObservedKnown = true
+	}
+	if event.Source.Valid() {
+		if frame, ok := coordinator.runtime.Sources.LatestFrame(event.Source); ok {
+			observation.Frame = frame
+			observation.FrameKnown = true
+		}
+		if signal, ok := coordinator.runtime.Sources.Status(event.Source); ok {
+			observation.Signal = signal
+			observation.SignalKnown = true
+		}
+	}
+	if output, ok := coordinator.runtime.Playout.Output(eventID); ok {
+		observation.StagedSource = output.Source
+		observation.StagedGeneration = output.SourceGeneration
+		observation.StagedFence = output.Fence
+		observation.StagedKnown = true
+	}
+	check := verify.Evaluate(event, fence, observation, coordinator.runtime.Clock())
+	coordinator.runtime.SourceChecks.Record(check)
+	if _, err := coordinator.runtime.Journal.Persist(event.ID, "source-check", event.Revision, fence, check); err != nil {
+		return check, fmt.Errorf("source check was not durable: %w", err)
+	}
+	if !check.Passed {
+		return check, fmt.Errorf("source verification failed: %s", check.Reason)
+	}
+	return check, nil
+}
+
 func (coordinator *Coordinator) CommitOnAir(eventID model.EventID, fence uint64) error {
 	event, ok := coordinator.runtime.Events.Get(eventID)
 	if !ok {
@@ -133,6 +173,9 @@ func (coordinator *Coordinator) CommitOnAir(eventID model.EventID, fence uint64)
 		return err
 	}
 	if _, err := coordinator.runtime.Quality.Permit(eventID, true, true); err != nil {
+		return err
+	}
+	if _, err := coordinator.VerifySource(eventID, fence); err != nil {
 		return err
 	}
 	if err := coordinator.runtime.Playout.CommitOnAir(event, fence, map[string]any{"offset_ms": 0, "source_generation": event.SourceGeneration}); err != nil {

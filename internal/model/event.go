@@ -33,6 +33,7 @@ type LiveEvent struct {
 	Name             string     `json:"name"`
 	Phase            EventPhase `json:"phase"`
 	Revision         RevisionID `json:"revision"`
+	Source           SourceID   `json:"source"`
 	CommandEpoch     uint64     `json:"command_epoch"`
 	SourceGeneration uint64     `json:"source_generation"`
 	CreatedAt        time.Time  `json:"created_at"`

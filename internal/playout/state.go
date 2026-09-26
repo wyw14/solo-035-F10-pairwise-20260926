@@ -9,13 +9,14 @@ import (
 )
 
 type Output struct {
-	EventID   model.EventID    `json:"event_id"`
-	Revision  model.RevisionID `json:"revision"`
-	Fence     uint64           `json:"fence"`
-	Source    model.SourceID   `json:"source"`
-	OnAir     bool             `json:"on_air"`
-	Segment   string           `json:"segment"`
-	UpdatedAt time.Time        `json:"updated_at"`
+	EventID          model.EventID    `json:"event_id"`
+	Revision         model.RevisionID `json:"revision"`
+	Fence            uint64           `json:"fence"`
+	Source           model.SourceID   `json:"source"`
+	SourceGeneration uint64           `json:"source_generation"`
+	OnAir            bool             `json:"on_air"`
+	Segment          string           `json:"segment"`
+	UpdatedAt        time.Time        `json:"updated_at"`
 }
 
 type State struct {

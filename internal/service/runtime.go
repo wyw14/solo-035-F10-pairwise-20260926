@@ -16,6 +16,7 @@ import (
 	"github.com/wyw14/solo-035/internal/quality"
 	"github.com/wyw14/solo-035/internal/source"
 	"github.com/wyw14/solo-035/internal/syncer"
+	"github.com/wyw14/solo-035/internal/verify"
 )
 
 type Runtime struct {
@@ -47,6 +48,7 @@ type Runtime struct {
 	Playout         *playout.Coordinator
 	PlayoutFlow     *playout.Integration
 	PlayoutRecovery *playout.Recovery
+	SourceChecks    *verify.State
 	BackupState     *backup.State
 	Backup          *backup.Coordinator
 }
@@ -95,6 +97,7 @@ func NewRuntime(dataDirectory string, clock func() time.Time) (*Runtime, error) 
 	runtime.Playout = playout.NewCoordinator(runtime.PlayoutState, runtime.Journal, clock)
 	runtime.PlayoutFlow = playout.NewIntegration(runtime.PlayoutState)
 	runtime.PlayoutRecovery = playout.NewRecovery(runtime.PlayoutState, clock)
+	runtime.SourceChecks = verify.NewState()
 	runtime.BackupState = backup.NewState()
 	runtime.Backup = backup.NewCoordinator(runtime.BackupState, runtime.Audio, runtime.EncoderFlow, runtime.PlayoutFlow, clock)
 	if runtime.Backup == nil {

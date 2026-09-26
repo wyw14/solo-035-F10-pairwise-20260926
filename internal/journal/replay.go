@@ -7,10 +7,11 @@ import (
 )
 
 type ReplayResult struct {
-	EventID  model.EventID    `json:"event_id"`
-	Revision model.RevisionID `json:"revision"`
-	Fence    uint64           `json:"fence"`
-	Kinds    []string         `json:"kinds"`
+	EventID          model.EventID    `json:"event_id"`
+	Revision         model.RevisionID `json:"revision"`
+	Fence            uint64           `json:"fence"`
+	SourceGeneration uint64           `json:"source_generation"`
+	Kinds            []string         `json:"kinds"`
 }
 
 func Replay(records []Record) ([]ReplayResult, error) {
@@ -31,6 +32,14 @@ func Replay(records []Record) ([]ReplayResult, error) {
 		}
 		if record.Fence > result.Fence {
 			result.Fence = record.Fence
+		}
+		if record.Kind == "lip-sync-proof" {
+			var payload struct {
+				SourceGeneration uint64 `json:"source_generation"`
+			}
+			if err := record.Decode(&payload); err == nil && payload.SourceGeneration > 0 {
+				result.SourceGeneration = payload.SourceGeneration
+			}
 		}
 		result.Kinds = append(result.Kinds, record.Kind)
 	}

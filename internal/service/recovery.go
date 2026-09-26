@@ -18,6 +18,7 @@ func (runtime *Runtime) Recover(sourceFor func(model.EventID) model.SourceID) (R
 	if err != nil {
 		return RecoveryReport{}, err
 	}
+	runtime.replaySourceChecks(records)
 	results, err := journal.Replay(records)
 	if err != nil {
 		return RecoveryReport{}, err
@@ -50,6 +51,7 @@ func (runtime *Runtime) RestoreFromRecords(records []journal.Record, sourceFor f
 	for _, record := range records {
 		runtime.JournalState.Apply(record)
 	}
+	runtime.replaySourceChecks(records)
 	results, err := journal.Replay(runtime.JournalState.Records())
 	if err != nil {
 		return RecoveryReport{}, err
@@ -65,4 +67,17 @@ func (runtime *Runtime) RestoreFromRecords(records []journal.Record, sourceFor f
 		report.Trace = append(report.Trace, "started-playout-worker")
 	}
 	return report, nil
+}
+
+func (runtime *Runtime) replaySourceChecks(records []journal.Record) {
+	for _, record := range records {
+		if record.Kind != "source-check" {
+			continue
+		}
+		var check model.SourceCheck
+		if err := record.Decode(&check); err != nil {
+			continue
+		}
+		runtime.SourceChecks.Record(check)
+	}
 }
